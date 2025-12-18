@@ -105,8 +105,9 @@ WORKDIR /comfyui
 RUN mkdir -p models/checkpoints models/vae models/unet models/clip
 
 # Install SageAttention 2.2.0 (containing SafeAttention2++)
+WORKDIR /
 RUN git clone https://github.com/thu-ml/SageAttention.git
-RUN cd SageAttention 
+WORKDIR SageAttention 
 RUN export EXT_PARALLEL=4 NVCC_APPEND_FLAGS="--threads 8" MAX_JOBS=32 # parallel compiling (Optional)
 RUN python setup.py install 
 
