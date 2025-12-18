@@ -104,12 +104,23 @@ WORKDIR /comfyui
 # Create necessary directories upfront
 RUN mkdir -p models/checkpoints models/vae models/unet models/clip
 
+
+
 # Install SageAttention 2.2.0 (containing SafeAttention2++)
+# compile for A40 + RTX 5090
+ENV TORCH_CUDA_ARCH_LIST="8.6;12.0+PTX"
+ENV FORCE_CUDA=1
+ENV EXT_PARALLEL=4
+ENV NVCC_APPEND_FLAGS="--threads 8"
+ENV MAX_JOBS=32
+
 WORKDIR /
 RUN git clone https://github.com/thu-ml/SageAttention.git
-WORKDIR SageAttention 
-RUN export EXT_PARALLEL=4 NVCC_APPEND_FLAGS="--threads 8" MAX_JOBS=32
+WORKDIR SageAttention
 RUN python setup.py install 
+
+
+
 
 # Stage 3: Final image
 FROM base AS final
