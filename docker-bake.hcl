@@ -11,7 +11,8 @@ variable "RELEASE_VERSION" {
 }
 
 variable "COMFYUI_VERSION" {
-  default = "0.3.44"
+  # Keep this aligned with Dockerfile's fallback so bake and direct builds install the same ComfyUI version.
+  default = "0.5.1"
 }
 
 # Global defaults for standard CUDA 12.6.3 images
@@ -153,4 +154,3 @@ target "base-cuda12-8-1" {
   }
   tags = ["${DOCKERHUB_REPO}/${DOCKERHUB_IMG}:${RELEASE_VERSION}-base-cuda12.8.1"]
 }
-
