@@ -56,15 +56,9 @@ RUN if [ -n "${CUDA_VERSION_FOR_COMFY}" ]; then \
       /usr/bin/yes | comfy --workspace /comfyui install --version "${COMFYUI_VERSION}" --nvidia; \
     fi
 
-RUN uv pip install \
-    "SQLAlchemy>=2.0.0" \
-    alembic \
-    blake3 \
-    "comfy-kitchen>=0.2.8" \
-    comfy-aimdo==0.3.0 \
-    comfyui-embedded-docs==0.5.0 \
-    comfyui-frontend-package==1.43.18 \
-    comfyui-workflow-templates==0.9.85
+RUN grep -vE '^(torch|torchvision|torchaudio)([<=>].*)?$' /comfyui/requirements.txt > /tmp/comfyui-requirements-no-torch.txt \
+    && uv pip install -r /tmp/comfyui-requirements-no-torch.txt \
+    && rm /tmp/comfyui-requirements-no-torch.txt
 
 # Upgrade PyTorch if needed (for newer CUDA versions)
 RUN if [ "$ENABLE_PYTORCH_UPGRADE" = "true" ]; then \
