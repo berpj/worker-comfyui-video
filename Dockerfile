@@ -56,9 +56,7 @@ RUN if [ -n "${CUDA_VERSION_FOR_COMFY}" ]; then \
       /usr/bin/yes | comfy --workspace /comfyui install --version "${COMFYUI_VERSION}" --nvidia; \
     fi
 
-RUN grep -vE '^(torch|torchvision|torchaudio)([<=>].*)?$' /comfyui/requirements.txt > /tmp/comfyui-requirements-no-torch.txt \
-    && uv pip install -r /tmp/comfyui-requirements-no-torch.txt \
-    && rm /tmp/comfyui-requirements-no-torch.txt
+RUN uv pip install -r /comfyui/requirements.txt
 
 # Upgrade PyTorch if needed (for newer CUDA versions)
 RUN if [ "$ENABLE_PYTORCH_UPGRADE" = "true" ]; then \
