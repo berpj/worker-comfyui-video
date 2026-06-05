@@ -165,8 +165,12 @@ def validate_input(job_input):
                 "'images' must be a list of objects with 'name' and 'image' keys",
             )
 
+    bucket_endpoint_url = job_input.get("BUCKET_ENDPOINT_URL")
+    if bucket_endpoint_url is not None and not isinstance(bucket_endpoint_url, str):
+        return None, "'BUCKET_ENDPOINT_URL' must be a string"
+
     # Return validated data and no error
-    return {"workflow": workflow, "images": images}, None
+    return {"workflow": workflow, "images": images, "BUCKET_ENDPOINT_URL": bucket_endpoint_url}, None
 
 
 def check_server(url, retries=500, delay=50):
@@ -523,8 +527,15 @@ def handler(job):
     output_data_images = []
     output_data_videos = []
     errors = []
+    previous_bucket_endpoint_url = os.environ.get("BUCKET_ENDPOINT_URL")
+    bucket_endpoint_overridden = False
 
     try:
+        bucket_endpoint_url = validated_data.get("BUCKET_ENDPOINT_URL")
+        if bucket_endpoint_url:
+            os.environ["BUCKET_ENDPOINT_URL"] = bucket_endpoint_url
+            bucket_endpoint_overridden = True
+
         # Establish WebSocket connection
         ws_url = f"ws://{COMFY_HOST}/ws?clientId={client_id}"
         print(f"worker-comfyui - Connecting to websocket: {ws_url}")
@@ -810,6 +821,12 @@ def handler(job):
         print(traceback.format_exc())
         return {"error": f"An unexpected error occurred: {e}"}
     finally:
+        if bucket_endpoint_overridden:
+            if previous_bucket_endpoint_url is None:
+                os.environ.pop("BUCKET_ENDPOINT_URL", None)
+            else:
+                os.environ["BUCKET_ENDPOINT_URL"] = previous_bucket_endpoint_url
+
         if ws and ws.connected:
             print(f"worker-comfyui - Closing websocket connection.")
             ws.close()
