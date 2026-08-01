@@ -142,10 +142,10 @@ target "flux1-dev-fp8" {
 target "base-cuda12-8-1" {
   context = "."
   dockerfile = "Dockerfile"
-  target = "base"
+  target = "clean"
   platforms = ["linux/amd64"]
   args = {
-    BASE_IMAGE = "nvidia/cuda:12.8.1-cudnn-runtime-ubuntu24.04"
+    BASE_IMAGE = "nvidia/cuda:12.8.1-cudnn-devel-ubuntu24.04"
     COMFYUI_VERSION = "${COMFYUI_VERSION}"
     CUDA_VERSION_FOR_COMFY = ""
     ENABLE_PYTORCH_UPGRADE = "true"

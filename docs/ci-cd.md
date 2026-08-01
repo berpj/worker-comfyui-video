@@ -2,6 +2,8 @@
 
 This project includes GitHub Actions workflows to automatically build and deploy Docker images to Docker Hub.
 
+CUDA 12.8.1 base images publish the `clean` Docker stage. It keeps the CUDA development toolchain for downstream custom-node builds while excluding build-only Python layers.
+
 ## Automatic Deployment to Docker Hub with GitHub Actions
 
 The repository contains two workflows located in the `.github/workflows` directory:

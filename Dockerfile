@@ -1,8 +1,8 @@
 # Build argument for base image selection
 ARG BASE_IMAGE=nvidia/cuda:12.8.1-cudnn-devel-ubuntu24.04
 
-# Stage 1: Base image with common dependencies
-FROM ${BASE_IMAGE} AS base
+# Stage 1: System dependencies shared by build and final images
+FROM ${BASE_IMAGE} AS system
 
 # Build arguments for this stage with sensible defaults for standalone builds
 ARG COMFYUI_VERSION=0.22.3
@@ -32,10 +32,13 @@ RUN apt-get update && apt-get install -y \
     libxrender1 \
     ffmpeg \
     && ln -sf /usr/bin/python3.12 /usr/bin/python \
-    && ln -sf /usr/bin/pip3 /usr/bin/pip
+    && ln -sf /usr/bin/pip3 /usr/bin/pip \
+    && apt-get autoremove -y \
+    && apt-get clean -y \
+    && rm -rf /var/lib/apt/lists/*
 
-# Clean up to reduce image size
-RUN apt-get autoremove -y && apt-get clean -y && rm -rf /var/lib/apt/lists/*
+# Stage 2: Build ComfyUI and its Python environment
+FROM system AS base
 
 # Install uv (latest) using official installer and create isolated venv
 RUN wget -qO- https://astral.sh/uv/install.sh | sh \
@@ -44,25 +47,29 @@ RUN wget -qO- https://astral.sh/uv/install.sh | sh \
     && uv venv /opt/venv
 
 # Use the virtual environment for all subsequent commands
-ENV PATH="/opt/venv/bin:${PATH}"
+ENV VIRTUAL_ENV=/opt/venv \
+    PATH="/opt/venv/bin:${PATH}"
 
 # Install comfy-cli + dependencies needed by it to install ComfyUI
-RUN uv pip install comfy-cli pip setuptools wheel
-
-# Install ComfyUI
-RUN if [ -n "${CUDA_VERSION_FOR_COMFY}" ]; then \
-      /usr/bin/yes | comfy --workspace /comfyui install --version "${COMFYUI_VERSION}" --cuda-version "${CUDA_VERSION_FOR_COMFY}" --nvidia; \
-    else \
-      /usr/bin/yes | comfy --workspace /comfyui install --version "${COMFYUI_VERSION}" --nvidia; \
-    fi
-
-RUN uv pip install -r /comfyui/requirements.txt
+RUN uv pip install comfy-cli==1.10.3 pip setuptools wheel
 
 # Upgrade PyTorch if needed (for newer CUDA versions)
 RUN if [ "$ENABLE_PYTORCH_UPGRADE" = "true" ]; then \
-      uv pip install --force-reinstall torch torchvision torchaudio --index-url ${PYTORCH_INDEX_URL}; \
-    fi && \
-    python -c "import torch; print(f'Torch CUDA: {torch.version.cuda}')"
+      uv pip install --force-reinstall torch==2.11.0 torchvision==0.26.0 torchaudio==2.11.0 --index-url ${PYTORCH_INDEX_URL}; \
+    fi
+
+# Install ComfyUI
+RUN if [ "$ENABLE_PYTORCH_UPGRADE" = "true" ]; then \
+      COMFY_INSTALL_OPTIONS="--skip-torch-or-directml"; \
+    fi; \
+    if [ -n "${CUDA_VERSION_FOR_COMFY}" ]; then \
+      /usr/bin/yes | comfy --workspace /comfyui install --version "${COMFYUI_VERSION}" --cuda-version "${CUDA_VERSION_FOR_COMFY}" --nvidia ${COMFY_INSTALL_OPTIONS:-}; \
+    else \
+      /usr/bin/yes | comfy --workspace /comfyui install --version "${COMFYUI_VERSION}" --nvidia ${COMFY_INSTALL_OPTIONS:-}; \
+    fi
+
+RUN uv pip install -r /comfyui/requirements.txt transformers==5.10.2 comfy-kitchen==0.2.10 \
+    && python -c "import torch; print(f'Torch CUDA: {torch.version.cuda}')"
 
 # Change working directory to ComfyUI
 WORKDIR /comfyui
@@ -74,7 +81,7 @@ ADD src/extra_model_paths.yaml ./
 WORKDIR /
 
 # Install Python runtime dependencies for the handler
-RUN uv pip install runpod requests websocket-client
+RUN uv pip install runpod==1.9.1 requests websocket-client
 
 # Add application code and scripts
 ADD src/start.sh handler.py test_input.json ./
@@ -94,7 +101,24 @@ RUN chmod +x /usr/local/bin/comfy-manager-set-mode
 # Set the default command to run when starting the container
 CMD ["/start.sh"]
 
-# Stage 2: Download models
+# Stage 3: Clean image without installation layers or duplicate Python packages
+FROM system AS clean
+
+ENV PIP_NO_INPUT=1 \
+    VIRTUAL_ENV=/opt/venv \
+    PATH="/opt/venv/bin:${PATH}"
+
+COPY --from=base /opt/venv /opt/venv
+COPY --from=base /comfyui /comfyui
+COPY --from=base /root/.local /root/.local
+COPY --from=base /root/.config/comfy-cli /root/.config/comfy-cli
+COPY --from=base /handler.py /start.sh /test_input.json /
+COPY --from=base /usr/local/bin/uv /usr/local/bin/uvx /usr/local/bin/comfy-node-install /usr/local/bin/comfy-manager-set-mode /usr/local/bin/
+
+WORKDIR /
+CMD ["/start.sh"]
+
+# Stage 4: Download models
 FROM base AS downloader
 
 ARG HUGGINGFACE_ACCESS_TOKEN
@@ -107,8 +131,8 @@ WORKDIR /comfyui
 # Create necessary directories upfront
 RUN mkdir -p models/checkpoints models/vae models/unet models/clip
 
-# Stage 3: Final image
-FROM base AS final
+# Stage 5: Final image
+FROM clean AS final
 
-# Copy models from stage 2 to the final image
+# Copy downloaded models into the final image
 COPY --from=downloader /comfyui/models /comfyui/models
